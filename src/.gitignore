@@ -59,3 +59,10 @@ coverage.xml
 # Uvicorn / Gunicorn logs
 *.pid
 *.sock
+
+python-ai/venv/
+python-ai/__pycache__/
+*.pyc
+*.backup
+package-lock.json.backup
+package.json.backup
