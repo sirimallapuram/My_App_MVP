@@ -1,6 +1,4 @@
-# ---------------------------
-# Python
-# ---------------------------
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
@@ -33,10 +31,18 @@ env/
 .ENV/
 .env
 
+# VS Code / PyCharm / IDE stuff
+.vscode/
+.idea/
+
 # Logs and databases
 *.log
 *.sqlite3
 *.db
+
+# OS files
+.DS_Store
+Thumbs.db
 
 # pytest / coverage
 htmlcov/
@@ -53,41 +59,3 @@ coverage.xml
 # Uvicorn / Gunicorn logs
 *.pid
 *.sock
-
-# ---------------------------
-# Node.js
-# ---------------------------
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-package-lock.json
-yarn.lock
-.pnp/
-.pnp.js
-
-# Build outputs
-dist/
-build/
-.cache/
-.next/
-out/
-
-# Environment files
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# ---------------------------
-# Editors / IDEs
-# ---------------------------
-.vscode/
-.idea/
-
-# ---------------------------
-# OS files
-# ---------------------------
-.DS_Store
-Thumbs.db
