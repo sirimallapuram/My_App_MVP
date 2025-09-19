@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { SignupCredentials } from '../types/auth';
@@ -8,7 +8,7 @@ interface SignupFormProps {
 }
 
 const SignupForm: React.FC<SignupFormProps> = ({ onSwitchToLogin }) => {
-  const { signup } = useAuth();
+  const { signup, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const [formData, setFormData] = useState<SignupCredentials>({
     name: '',
@@ -18,6 +18,13 @@ const SignupForm: React.FC<SignupFormProps> = ({ onSwitchToLogin }) => {
   const [errors, setErrors] = useState<Partial<SignupCredentials>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [apiError, setApiError] = useState('');
+
+  // Navigate to dashboard when authentication succeeds
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/dashboard');
+    }
+  }, [isAuthenticated, navigate]);
 
   const validateForm = (): boolean => {
     const newErrors: Partial<SignupCredentials> = {};
@@ -55,7 +62,7 @@ const SignupForm: React.FC<SignupFormProps> = ({ onSwitchToLogin }) => {
     try {
       setIsLoading(true);
       await signup(formData);
-      navigate('/dashboard');
+      // Navigation will be handled by useEffect when isAuthenticated becomes true
     } catch (error: any) {
       setApiError(error.response?.data?.message || 'Signup failed. Please try again.');
     } finally {

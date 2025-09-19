@@ -1,7 +1,9 @@
 import axios from 'axios';
 import { LoginCredentials, SignupCredentials, AuthResponse } from '../types/auth';
+import { mockAuthService } from './mockApi';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+const USE_MOCK_API = process.env.REACT_APP_USE_MOCK_API === 'true' || !process.env.REACT_APP_API_URL;
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -39,11 +41,17 @@ api.interceptors.response.use(
 
 export const authService = {
   login: async (credentials: LoginCredentials): Promise<AuthResponse> => {
+    if (USE_MOCK_API) {
+      return mockAuthService.login(credentials);
+    }
     const response = await api.post('/auth/login', credentials);
     return response.data;
   },
 
   signup: async (credentials: SignupCredentials): Promise<AuthResponse> => {
+    if (USE_MOCK_API) {
+      return mockAuthService.signup(credentials);
+    }
     const response = await api.post('/auth/signup', credentials);
     return response.data;
   },

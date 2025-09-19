@@ -1,18 +1,37 @@
 import React from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { usePresence } from '../contexts/PresenceContext';
+import ChannelList from '../components/ChannelList';
+import PresenceList from '../components/PresenceList';
 
 const Dashboard: React.FC = () => {
   const { user, logout } = useAuth();
+  const { activeChannel, totalOnlineCount } = usePresence();
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Navigation */}
       <nav className="bg-white shadow">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center">
-              <h1 className="text-xl font-semibold text-gray-900">Zoom Clone</h1>
+              <h1 className="text-xl font-semibold text-gray-900">CollabSpace</h1>
+              {activeChannel && (
+                <div className="ml-4 flex items-center">
+                  <span className="text-gray-400">#</span>
+                  <span className="ml-1 text-gray-700 font-medium">
+                    {activeChannel.name}
+                  </span>
+                </div>
+              )}
             </div>
             <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2">
+                <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                <span className="text-sm text-gray-600">
+                  {totalOnlineCount} online
+                </span>
+              </div>
               <span className="text-gray-700">Welcome, {user?.name}</span>
               <button
                 onClick={logout}
@@ -25,28 +44,93 @@ const Dashboard: React.FC = () => {
         </div>
       </nav>
 
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          <div className="border-4 border-dashed border-gray-200 rounded-lg h-96 flex items-center justify-center">
-            <div className="text-center">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">
-                Welcome to your Dashboard!
-              </h2>
-              <p className="text-gray-600 mb-6">
-                This is where your video conferencing features will be implemented.
-              </p>
-              <div className="space-y-4">
-                <button className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-md font-medium">
-                  Start New Meeting
-                </button>
-                <button className="bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-md font-medium ml-4">
-                  Join Meeting
-                </button>
+      {/* Main Content */}
+      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <div className="px-4 sm:px-0">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            {/* Left Sidebar - Channels */}
+            <div className="lg:col-span-1">
+              <ChannelList />
+            </div>
+
+            {/* Main Content Area */}
+            <div className="lg:col-span-2">
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 h-96">
+                {activeChannel ? (
+                  <div className="h-full flex flex-col">
+                    {/* Channel Header */}
+                    <div className="px-6 py-4 border-b border-gray-200">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h2 className="text-lg font-semibold text-gray-900">
+                            #{activeChannel.name}
+                          </h2>
+                          {activeChannel.description && (
+                            <p className="text-sm text-gray-600 mt-1">
+                              {activeChannel.description}
+                            </p>
+                          )}
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          {activeChannel.memberCount} member{activeChannel.memberCount !== 1 ? 's' : ''}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Channel Content */}
+                    <div className="flex-1 p-6">
+                      <div className="h-full flex items-center justify-center">
+                        <div className="text-center">
+                          <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                            </svg>
+                          </div>
+                          <h3 className="text-lg font-medium text-gray-900 mb-2">
+                            Welcome to #{activeChannel.name}
+                          </h3>
+                          <p className="text-gray-600 mb-6">
+                            This is the beginning of your conversation in this channel.
+                          </p>
+                          <div className="space-y-3">
+                            <button className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-md font-medium">
+                              Start Video Call
+                            </button>
+                            <button className="bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-md font-medium ml-4">
+                              Send Message
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="h-full flex items-center justify-center">
+                    <div className="text-center">
+                      <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                        </svg>
+                      </div>
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">
+                        Select a Channel
+                      </h3>
+                      <p className="text-gray-600">
+                        Choose a channel from the sidebar to start collaborating.
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
+            </div>
+
+            {/* Right Sidebar - Online Users */}
+            <div className="lg:col-span-1">
+              <PresenceList />
             </div>
           </div>
         </div>
-      </main>
+      </div>
     </div>
   );
 };
