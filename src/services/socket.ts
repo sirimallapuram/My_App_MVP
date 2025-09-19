@@ -1,6 +1,7 @@
 // Socket.IO service for real-time communication
 import io from 'socket.io-client';
 import { SocketEvents, SocketEmits } from '../types/presence';
+import { ChatSocketEvents, ChatSocketEmits } from '../types/chat';
 
 class SocketService {
   private socket: any = null;
@@ -80,7 +81,7 @@ class SocketService {
   /**
    * Emit events to server
    */
-  emit<K extends keyof SocketEmits>(event: K, data: Parameters<SocketEmits[K]>[0]) {
+  emit<K extends keyof (SocketEmits & ChatSocketEmits)>(event: K, data: Parameters<(SocketEmits & ChatSocketEmits)[K]>[0]) {
     if (this.socket) {
       this.socket.emit(event, data);
     } else {
@@ -91,7 +92,7 @@ class SocketService {
   /**
    * Listen to server events
    */
-  on<K extends keyof SocketEvents>(event: K, callback: SocketEvents[K]) {
+  on<K extends keyof (SocketEvents & ChatSocketEvents)>(event: K, callback: (SocketEvents & ChatSocketEvents)[K]) {
     if (this.socket) {
       this.socket.on(event, callback);
     } else {
@@ -102,7 +103,7 @@ class SocketService {
   /**
    * Remove event listener
    */
-  off<K extends keyof SocketEvents>(event: K, callback?: SocketEvents[K]) {
+  off<K extends keyof (SocketEvents & ChatSocketEvents)>(event: K, callback?: (SocketEvents & ChatSocketEvents)[K]) {
     if (this.socket) {
       this.socket.off(event, callback);
     }

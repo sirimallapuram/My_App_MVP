@@ -1,12 +1,18 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { usePresence } from '../contexts/PresenceContext';
+import { useChat } from '../contexts/ChatContext';
 import ChannelList from '../components/ChannelList';
 import PresenceList from '../components/PresenceList';
+import AudioMeeting from '../components/AudioMeeting';
 
 const Dashboard: React.FC = () => {
   const { user, logout } = useAuth();
   const { activeChannel, totalOnlineCount } = usePresence();
+  const { joinMeeting, isInMeeting } = useChat();
+  const navigate = useNavigate();
+  const [showAudioMeeting, setShowAudioMeeting] = useState(false);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -31,6 +37,20 @@ const Dashboard: React.FC = () => {
                 <span className="text-sm text-gray-600">
                   {totalOnlineCount} online
                 </span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => navigate('/chat')}
+                  className="px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                >
+                  💬 Chat
+                </button>
+                <button
+                  onClick={() => setShowAudioMeeting(true)}
+                  className="px-3 py-1 text-sm bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+                >
+                  🎤 Meeting
+                </button>
               </div>
               <span className="text-gray-700">Welcome, {user?.name}</span>
               <button
@@ -93,11 +113,17 @@ const Dashboard: React.FC = () => {
                             This is the beginning of your conversation in this channel.
                           </p>
                           <div className="space-y-3">
-                            <button className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-md font-medium">
-                              Start Video Call
+                            <button 
+                              onClick={() => navigate('/chat')}
+                              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-md font-medium"
+                            >
+                              💬 Open Chat
                             </button>
-                            <button className="bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-md font-medium ml-4">
-                              Send Message
+                            <button 
+                              onClick={() => setShowAudioMeeting(true)}
+                              className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-md font-medium ml-4"
+                            >
+                              🎤 Start Meeting
                             </button>
                           </div>
                         </div>
@@ -131,6 +157,11 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Audio Meeting Modal */}
+      {showAudioMeeting && (
+        <AudioMeeting onClose={() => setShowAudioMeeting(false)} />
+      )}
     </div>
   );
 };

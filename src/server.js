@@ -4,6 +4,9 @@ const http = require('http');
 const socketIo = require('socket.io');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 
 const app = express();
 const server = http.createServer(app);
@@ -17,14 +20,53 @@ const io = socketIo(server, {
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use('/uploads', express.static(uploadDir));
 
 // In-memory storage (in production, use Redis or database)
 const connectedUsers = new Map(); // userId -> { socketId, user, channels }
 const channels = new Map(); // channelId -> channel data
 const channelMembers = new Map(); // channelId -> Set of userIds
+const messages = new Map(); // channelId -> Array of messages
+const meetings = new Map(); // meetingId -> meeting data
+const typingUsers = new Map(); // channelId -> Set of userIds
 
 // JWT secret (in production, use environment variable)
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+
+// File upload configuration
+const uploadDir = 'uploads';
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({ 
+  storage: storage,
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    // Allow common file types
+    const allowedTypes = /jpeg|jpg|png|gif|pdf|doc|docx|txt|mp3|mp4|zip/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+    
+    if (mimetype && extname) {
+      return cb(null, true);
+    } else {
+      cb(new Error('File type not supported'));
+    }
+  }
+});
 
 // Middleware to authenticate socket connections
 io.use((socket, next) => {
@@ -194,6 +236,359 @@ io.on('connection', (socket) => {
     socket.emit('channels:list', channelsList);
   });
 
+  // Chat message handlers
+  socket.on('message:send', (data) => {
+    try {
+      const { channelId, content, type } = data;
+      const channel = channels.get(channelId);
+      
+      if (!channel) {
+        socket.emit('error', { message: 'Channel not found', code: 'CHANNEL_NOT_FOUND' });
+        return;
+      }
+
+      const message = {
+        id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        channelId,
+        userId: socket.userId,
+        username: socket.user.name,
+        content,
+        type: type || 'text',
+        timestamp: new Date(),
+        isEdited: false
+      };
+
+      // Store message
+      if (!messages.has(channelId)) {
+        messages.set(channelId, []);
+      }
+      messages.get(channelId).push(message);
+
+      // Broadcast to channel members
+      const members = channelMembers.get(channelId) || new Set();
+      members.forEach(memberId => {
+        const member = connectedUsers.get(memberId);
+        if (member) {
+          io.to(member.socketId).emit('message:new', message);
+        }
+      });
+
+      console.log(`Message sent in channel ${channel.name} by ${socket.user.name}`);
+    } catch (error) {
+      socket.emit('error', { message: 'Failed to send message', code: 'MESSAGE_SEND_ERROR' });
+    }
+  });
+
+  socket.on('message:edit', (data) => {
+    try {
+      const { messageId, content } = data;
+      const channelId = data.channelId;
+      
+      if (!messages.has(channelId)) {
+        socket.emit('error', { message: 'Channel not found', code: 'CHANNEL_NOT_FOUND' });
+        return;
+      }
+
+      const channelMessages = messages.get(channelId);
+      const messageIndex = channelMessages.findIndex(msg => msg.id === messageId);
+      
+      if (messageIndex === -1) {
+        socket.emit('error', { message: 'Message not found', code: 'MESSAGE_NOT_FOUND' });
+        return;
+      }
+
+      const message = channelMessages[messageIndex];
+      if (message.userId !== socket.userId) {
+        socket.emit('error', { message: 'Unauthorized to edit message', code: 'UNAUTHORIZED' });
+        return;
+      }
+
+      // Update message
+      message.content = content;
+      message.isEdited = true;
+      message.editedAt = new Date();
+      channelMessages[messageIndex] = message;
+
+      // Broadcast update
+      const members = channelMembers.get(channelId) || new Set();
+      members.forEach(memberId => {
+        const member = connectedUsers.get(memberId);
+        if (member) {
+          io.to(member.socketId).emit('message:edit', message);
+        }
+      });
+
+      console.log(`Message edited by ${socket.user.name}`);
+    } catch (error) {
+      socket.emit('error', { message: 'Failed to edit message', code: 'MESSAGE_EDIT_ERROR' });
+    }
+  });
+
+  socket.on('message:delete', (messageId) => {
+    try {
+      // Find message in all channels
+      let found = false;
+      for (const [channelId, channelMessages] of messages.entries()) {
+        const messageIndex = channelMessages.findIndex(msg => msg.id === messageId);
+        if (messageIndex !== -1) {
+          const message = channelMessages[messageIndex];
+          if (message.userId !== socket.userId) {
+            socket.emit('error', { message: 'Unauthorized to delete message', code: 'UNAUTHORIZED' });
+            return;
+          }
+
+          // Remove message
+          channelMessages.splice(messageIndex, 1);
+          found = true;
+
+          // Broadcast deletion
+          const members = channelMembers.get(channelId) || new Set();
+          members.forEach(memberId => {
+            const member = connectedUsers.get(memberId);
+            if (member) {
+              io.to(member.socketId).emit('message:delete', messageId);
+            }
+          });
+
+          console.log(`Message deleted by ${socket.user.name}`);
+          break;
+        }
+      }
+
+      if (!found) {
+        socket.emit('error', { message: 'Message not found', code: 'MESSAGE_NOT_FOUND' });
+      }
+    } catch (error) {
+      socket.emit('error', { message: 'Failed to delete message', code: 'MESSAGE_DELETE_ERROR' });
+    }
+  });
+
+  socket.on('messages:fetch', (channelId) => {
+    try {
+      const channelMessages = messages.get(channelId) || [];
+      socket.emit('messages:history', channelMessages);
+    } catch (error) {
+      socket.emit('error', { message: 'Failed to fetch messages', code: 'MESSAGES_FETCH_ERROR' });
+    }
+  });
+
+  // Typing indicators
+  socket.on('typing:start', (data) => {
+    const { channelId } = data;
+    if (!typingUsers.has(channelId)) {
+      typingUsers.set(channelId, new Set());
+    }
+    typingUsers.get(channelId).add(socket.userId);
+
+    // Broadcast to other channel members
+    const members = channelMembers.get(channelId) || new Set();
+    members.forEach(memberId => {
+      if (memberId !== socket.userId) {
+        const member = connectedUsers.get(memberId);
+        if (member) {
+          io.to(member.socketId).emit('typing:start', {
+            userId: socket.userId,
+            username: socket.user.name,
+            channelId
+          });
+        }
+      }
+    });
+  });
+
+  socket.on('typing:stop', (data) => {
+    const { channelId } = data;
+    if (typingUsers.has(channelId)) {
+      typingUsers.get(channelId).delete(socket.userId);
+    }
+
+    // Broadcast to other channel members
+    const members = channelMembers.get(channelId) || new Set();
+    members.forEach(memberId => {
+      if (memberId !== socket.userId) {
+        const member = connectedUsers.get(memberId);
+        if (member) {
+          io.to(member.socketId).emit('typing:stop', {
+            userId: socket.userId,
+            channelId
+          });
+        }
+      }
+    });
+  });
+
+  // File upload handler
+  socket.on('file:upload', (data) => {
+    try {
+      const { channelId, file, content } = data;
+      const channel = channels.get(channelId);
+      
+      if (!channel) {
+        socket.emit('error', { message: 'Channel not found', code: 'CHANNEL_NOT_FOUND' });
+        return;
+      }
+
+      const message = {
+        id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        channelId,
+        userId: socket.userId,
+        username: socket.user.name,
+        content,
+        type: 'file',
+        fileData: file,
+        timestamp: new Date(),
+        isEdited: false
+      };
+
+      // Store message
+      if (!messages.has(channelId)) {
+        messages.set(channelId, []);
+      }
+      messages.get(channelId).push(message);
+
+      // Broadcast to channel members
+      const members = channelMembers.get(channelId) || new Set();
+      members.forEach(memberId => {
+        const member = connectedUsers.get(memberId);
+        if (member) {
+          io.to(member.socketId).emit('file:uploaded', message);
+        }
+      });
+
+      console.log(`File uploaded in channel ${channel.name} by ${socket.user.name}`);
+    } catch (error) {
+      socket.emit('error', { message: 'Failed to upload file', code: 'FILE_UPLOAD_ERROR' });
+    }
+  });
+
+  // Audio meeting handlers
+  socket.on('meeting:join', (data) => {
+    try {
+      const { channelId, meetingId } = data;
+      const channel = channels.get(channelId);
+      
+      if (!channel) {
+        socket.emit('error', { message: 'Channel not found', code: 'CHANNEL_NOT_FOUND' });
+        return;
+      }
+
+      const actualMeetingId = meetingId || `meeting_${channelId}_${Date.now()}`;
+      
+      if (!meetings.has(actualMeetingId)) {
+        meetings.set(actualMeetingId, {
+          id: actualMeetingId,
+          channelId,
+          participants: new Map(),
+          createdAt: new Date()
+        });
+      }
+
+      const meeting = meetings.get(actualMeetingId);
+      const participant = {
+        id: socket.userId,
+        username: socket.user.name,
+        isMuted: false,
+        isSpeaking: false,
+        joinedAt: new Date()
+      };
+
+      meeting.participants.set(socket.userId, participant);
+
+      // Join socket to meeting room
+      socket.join(actualMeetingId);
+
+      // Broadcast to meeting participants
+      socket.to(actualMeetingId).emit('meeting:join', {
+        meetingId: actualMeetingId,
+        participant
+      });
+
+      // Send current participants to the joining user
+      const participants = Array.from(meeting.participants.values());
+      socket.emit('meeting:participants', {
+        meetingId: actualMeetingId,
+        participants
+      });
+
+      console.log(`${socket.user.name} joined meeting ${actualMeetingId}`);
+    } catch (error) {
+      socket.emit('error', { message: 'Failed to join meeting', code: 'MEETING_JOIN_ERROR' });
+    }
+  });
+
+  socket.on('meeting:leave', (meetingId) => {
+    try {
+      const meeting = meetings.get(meetingId);
+      if (meeting) {
+        meeting.participants.delete(socket.userId);
+        
+        // Leave socket room
+        socket.leave(meetingId);
+
+        // Broadcast to other participants
+        socket.to(meetingId).emit('meeting:leave', {
+          meetingId,
+          userId: socket.userId
+        });
+
+        // Clean up empty meetings
+        if (meeting.participants.size === 0) {
+          meetings.delete(meetingId);
+        }
+
+        console.log(`${socket.user.name} left meeting ${meetingId}`);
+      }
+    } catch (error) {
+      socket.emit('error', { message: 'Failed to leave meeting', code: 'MEETING_LEAVE_ERROR' });
+    }
+  });
+
+  socket.on('meeting:mute', (data) => {
+    try {
+      const { meetingId, isMuted } = data;
+      const meeting = meetings.get(meetingId);
+      
+      if (meeting && meeting.participants.has(socket.userId)) {
+        const participant = meeting.participants.get(socket.userId);
+        participant.isMuted = isMuted;
+        meeting.participants.set(socket.userId, participant);
+
+        // Broadcast to other participants
+        socket.to(meetingId).emit('meeting:mute', {
+          meetingId,
+          userId: socket.userId,
+          isMuted
+        });
+
+        console.log(`${socket.user.name} ${isMuted ? 'muted' : 'unmuted'} in meeting ${meetingId}`);
+      }
+    } catch (error) {
+      socket.emit('error', { message: 'Failed to toggle mute', code: 'MEETING_MUTE_ERROR' });
+    }
+  });
+
+  socket.on('meeting:speaking', (data) => {
+    try {
+      const { meetingId, isSpeaking } = data;
+      const meeting = meetings.get(meetingId);
+      
+      if (meeting && meeting.participants.has(socket.userId)) {
+        const participant = meeting.participants.get(socket.userId);
+        participant.isSpeaking = isSpeaking;
+        meeting.participants.set(socket.userId, participant);
+
+        // Broadcast to other participants
+        socket.to(meetingId).emit('meeting:speaking', {
+          meetingId,
+          userId: socket.userId,
+          isSpeaking
+        });
+      }
+    } catch (error) {
+      socket.emit('error', { message: 'Failed to update speaking status', code: 'MEETING_SPEAKING_ERROR' });
+    }
+  });
+
   // Handle disconnection
   socket.on('disconnect', () => {
     console.log(`User ${socket.user.name} disconnected`);
@@ -235,12 +630,54 @@ function generateChannelId() {
   return 'channel_' + Math.random().toString(36).substr(2, 9);
 }
 
+// File upload API routes
+app.post('/api/upload', upload.single('file'), (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const fileData = {
+      id: `file_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      originalName: req.file.originalname,
+      fileName: req.file.filename,
+      fileSize: req.file.size,
+      mimeType: req.file.mimetype,
+      downloadUrl: `/uploads/${req.file.filename}`,
+      uploadedAt: new Date()
+    };
+
+    res.json({ success: true, file: fileData });
+  } catch (error) {
+    console.error('File upload error:', error);
+    res.status(500).json({ error: 'File upload failed' });
+  }
+});
+
+app.get('/api/files/:filename', (req, res) => {
+  try {
+    const filename = req.params.filename;
+    const filePath = path.join(uploadDir, filename);
+    
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    res.download(filePath);
+  } catch (error) {
+    console.error('File download error:', error);
+    res.status(500).json({ error: 'File download failed' });
+  }
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'ok', 
     connectedUsers: connectedUsers.size,
-    channels: channels.size 
+    channels: channels.size,
+    messages: Array.from(messages.values()).reduce((total, msgs) => total + msgs.length, 0),
+    meetings: meetings.size
   });
 });
 
