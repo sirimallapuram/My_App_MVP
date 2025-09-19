@@ -2,6 +2,7 @@
 import io from 'socket.io-client';
 import { SocketEvents, SocketEmits } from '../types/presence';
 import { ChatSocketEvents, ChatSocketEmits } from '../types/chat';
+import { MeetingChatSocketEvents, MeetingChatSocketEmits } from '../types/meeting';
 
 class SocketService {
   private socket: any = null;
@@ -81,7 +82,7 @@ class SocketService {
   /**
    * Emit events to server
    */
-  emit<K extends keyof (SocketEmits & ChatSocketEmits)>(event: K, data: Parameters<(SocketEmits & ChatSocketEmits)[K]>[0]) {
+  emit<K extends keyof (SocketEmits & ChatSocketEmits & MeetingChatSocketEmits)>(event: K, data: Parameters<(SocketEmits & ChatSocketEmits & MeetingChatSocketEmits)[K]>[0]) {
     if (this.socket) {
       this.socket.emit(event, data);
     } else {
@@ -92,7 +93,7 @@ class SocketService {
   /**
    * Listen to server events
    */
-  on<K extends keyof (SocketEvents & ChatSocketEvents)>(event: K, callback: (SocketEvents & ChatSocketEvents)[K]) {
+  on<K extends keyof (SocketEvents & ChatSocketEvents & MeetingChatSocketEvents)>(event: K, callback: (SocketEvents & ChatSocketEvents & MeetingChatSocketEvents)[K]) {
     if (this.socket) {
       this.socket.on(event, callback);
     } else {
@@ -103,7 +104,7 @@ class SocketService {
   /**
    * Remove event listener
    */
-  off<K extends keyof (SocketEvents & ChatSocketEvents)>(event: K, callback?: (SocketEvents & ChatSocketEvents)[K]) {
+  off<K extends keyof (SocketEvents & ChatSocketEvents & MeetingChatSocketEvents)>(event: K, callback?: (SocketEvents & ChatSocketEvents & MeetingChatSocketEvents)[K]) {
     if (this.socket) {
       this.socket.off(event, callback);
     }

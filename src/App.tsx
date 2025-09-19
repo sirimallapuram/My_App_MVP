@@ -8,6 +8,7 @@ import PublicRoute from './components/PublicRoute';
 import Auth from './pages/Auth';
 import Dashboard from './pages/Dashboard';
 import ChatPage from './pages/ChatPage';
+import CalendarPage from './pages/CalendarPage';
 import './App.css';
 
 function App() {
@@ -48,6 +49,14 @@ function App() {
                   element={
                     <ProtectedRoute>
                       <ChatPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/calendar"
+                  element={
+                    <ProtectedRoute>
+                      <CalendarPage />
                     </ProtectedRoute>
                   }
                 />

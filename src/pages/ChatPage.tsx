@@ -244,6 +244,12 @@ const ChatPage: React.FC = () => {
                   📊 Dashboard
                 </button>
                 <button
+                  onClick={() => navigate('/calendar')}
+                  className="px-3 py-1 text-sm bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors"
+                >
+                  📅 Calendar
+                </button>
+                <button
                   onClick={() => setShowAudioMeeting(true)}
                   className="px-3 py-1 text-sm bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
                 >

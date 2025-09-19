@@ -46,6 +46,12 @@ const Dashboard: React.FC = () => {
                   💬 Chat
                 </button>
                 <button
+                  onClick={() => navigate('/calendar')}
+                  className="px-3 py-1 text-sm bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors"
+                >
+                  📅 Calendar
+                </button>
+                <button
                   onClick={() => setShowAudioMeeting(true)}
                   className="px-3 py-1 text-sm bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
                 >
@@ -118,6 +124,12 @@ const Dashboard: React.FC = () => {
                               className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-md font-medium"
                             >
                               💬 Open Chat
+                            </button>
+                            <button 
+                              onClick={() => navigate('/calendar')}
+                              className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-md font-medium ml-4"
+                            >
+                              📅 View Calendar
                             </button>
                             <button 
                               onClick={() => setShowAudioMeeting(true)}

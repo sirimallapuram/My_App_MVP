@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useChat } from '../contexts/ChatContext';
 import { usePresence } from '../contexts/PresenceContext';
+import InMeetingChat from './InMeetingChat';
 
 interface AudioMeetingProps {
   onClose: () => void;
@@ -23,6 +24,7 @@ const AudioMeeting: React.FC<AudioMeetingProps> = ({ onClose }) => {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
+  const [isChatOpen, setIsChatOpen] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -335,6 +337,13 @@ const AudioMeeting: React.FC<AudioMeetingProps> = ({ onClose }) => {
         {/* Hidden audio element for microphone access */}
         <audio ref={audioRef} autoPlay muted />
       </div>
+
+      {/* In-Meeting Chat */}
+      <InMeetingChat
+        meetingId={meetingId || ''}
+        isOpen={isChatOpen}
+        onToggle={() => setIsChatOpen(!isChatOpen)}
+      />
     </div>
   );
 };

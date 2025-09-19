@@ -29,6 +29,9 @@ const channelMembers = new Map(); // channelId -> Set of userIds
 const messages = new Map(); // channelId -> Array of messages
 const meetings = new Map(); // meetingId -> meeting data
 const typingUsers = new Map(); // channelId -> Set of userIds
+const meetingChats = new Map(); // meetingId -> Array of in-meeting messages
+const meetingTypingUsers = new Map(); // meetingId -> Set of userIds
+const calendarEvents = new Map(); // eventId -> meeting event data
 
 // JWT secret (in production, use environment variable)
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
@@ -589,6 +592,174 @@ io.on('connection', (socket) => {
     }
   });
 
+  // In-meeting chat handlers
+  socket.on('meeting:chat:send', (data) => {
+    try {
+      const { meetingId, content, type } = data;
+      const meeting = meetings.get(meetingId);
+      
+      if (!meeting) {
+        socket.emit('error', { message: 'Meeting not found', code: 'MEETING_NOT_FOUND' });
+        return;
+      }
+
+      const message = {
+        id: `chat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        meetingId,
+        userId: socket.userId,
+        userName: socket.user.name,
+        content,
+        type: type || 'text',
+        timestamp: new Date(),
+        isEdited: false
+      };
+
+      // Store message
+      if (!meetingChats.has(meetingId)) {
+        meetingChats.set(meetingId, []);
+      }
+      meetingChats.get(meetingId).push(message);
+
+      // Broadcast to meeting participants
+      socket.to(meetingId).emit('meeting:chat:message', message);
+
+      console.log(`In-meeting chat message sent in meeting ${meetingId} by ${socket.user.name}`);
+    } catch (error) {
+      socket.emit('error', { message: 'Failed to send chat message', code: 'MEETING_CHAT_SEND_ERROR' });
+    }
+  });
+
+  socket.on('meeting:chat:typing', (data) => {
+    try {
+      const { meetingId, isTyping } = data;
+      const meeting = meetings.get(meetingId);
+      
+      if (!meeting) return;
+
+      if (!meetingTypingUsers.has(meetingId)) {
+        meetingTypingUsers.set(meetingId, new Set());
+      }
+
+      if (isTyping) {
+        meetingTypingUsers.get(meetingId).add(socket.userId);
+      } else {
+        meetingTypingUsers.get(meetingId).delete(socket.userId);
+      }
+
+      // Broadcast to other participants
+      socket.to(meetingId).emit('meeting:chat:typing', {
+        meetingId,
+        userId: socket.userId,
+        userName: socket.user.name,
+        isTyping
+      });
+    } catch (error) {
+      socket.emit('error', { message: 'Failed to update typing status', code: 'MEETING_CHAT_TYPING_ERROR' });
+    }
+  });
+
+  socket.on('meeting:chat:fetch', (meetingId) => {
+    try {
+      const messages = meetingChats.get(meetingId) || [];
+      socket.emit('meeting:chat:history', messages);
+    } catch (error) {
+      socket.emit('error', { message: 'Failed to fetch chat history', code: 'MEETING_CHAT_FETCH_ERROR' });
+    }
+  });
+
+  // Calendar event handlers
+  socket.on('meeting:event:create', (data) => {
+    try {
+      const event = {
+        id: `event_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        ...data,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+
+      calendarEvents.set(event.id, event);
+
+      // Notify all connected users
+      io.emit('meeting:event:created', event);
+
+      console.log(`Calendar event created: ${event.title} by ${socket.user.name}`);
+    } catch (error) {
+      socket.emit('error', { message: 'Failed to create event', code: 'EVENT_CREATE_ERROR' });
+    }
+  });
+
+  socket.on('meeting:event:update', (data) => {
+    try {
+      const event = {
+        ...data,
+        updatedAt: new Date()
+      };
+
+      calendarEvents.set(event.id, event);
+
+      // Notify all connected users
+      io.emit('meeting:event:updated', event);
+
+      console.log(`Calendar event updated: ${event.title} by ${socket.user.name}`);
+    } catch (error) {
+      socket.emit('error', { message: 'Failed to update event', code: 'EVENT_UPDATE_ERROR' });
+    }
+  });
+
+  socket.on('meeting:event:delete', (eventId) => {
+    try {
+      calendarEvents.delete(eventId);
+
+      // Notify all connected users
+      io.emit('meeting:event:deleted', eventId);
+
+      console.log(`Calendar event deleted: ${eventId} by ${socket.user.name}`);
+    } catch (error) {
+      socket.emit('error', { message: 'Failed to delete event', code: 'EVENT_DELETE_ERROR' });
+    }
+  });
+
+  socket.on('meeting:event:fetch', (data) => {
+    try {
+      const { startDate, endDate } = data;
+      const events = Array.from(calendarEvents.values()).filter(event => {
+        const eventStart = new Date(event.startDate);
+        const eventEnd = new Date(event.endDate);
+        return (eventStart >= startDate && eventStart <= endDate) ||
+               (eventEnd >= startDate && eventEnd <= endDate) ||
+               (eventStart <= startDate && eventEnd >= endDate);
+      });
+
+      socket.emit('meeting:event:fetched', events);
+    } catch (error) {
+      socket.emit('error', { message: 'Failed to fetch events', code: 'EVENT_FETCH_ERROR' });
+    }
+  });
+
+  socket.on('meeting:event:respond', (data) => {
+    try {
+      const { eventId, status } = data;
+      const event = calendarEvents.get(eventId);
+      
+      if (event) {
+        const participant = event.participants.find(p => p.id === socket.userId);
+        if (participant) {
+          participant.status = status;
+          participant.responseDate = new Date();
+          event.updatedAt = new Date();
+          calendarEvents.set(eventId, event);
+
+          // Notify all connected users
+          io.emit('meeting:event:updated', event);
+
+          console.log(`${socket.user.name} responded ${status} to event ${event.title}`);
+        }
+      }
+    } catch (error) {
+      socket.emit('error', { message: 'Failed to respond to event', code: 'EVENT_RESPOND_ERROR' });
+    }
+  });
+
   // Handle disconnection
   socket.on('disconnect', () => {
     console.log(`User ${socket.user.name} disconnected`);
@@ -677,7 +848,9 @@ app.get('/health', (req, res) => {
     connectedUsers: connectedUsers.size,
     channels: channels.size,
     messages: Array.from(messages.values()).reduce((total, msgs) => total + msgs.length, 0),
-    meetings: meetings.size
+    meetings: meetings.size,
+    meetingChats: Array.from(meetingChats.values()).reduce((total, msgs) => total + msgs.length, 0),
+    calendarEvents: calendarEvents.size
   });
 });
 
